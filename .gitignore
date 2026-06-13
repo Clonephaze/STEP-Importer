@@ -1,0 +1,15 @@
+# Bundled dependency wheels — drop built wheels here before running build.py
+step_importer/wheels/*.whl
+wheels/
+
+# Build output
+dist/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Test / IDE artifacts
+.pytest_cache/
+*.egg-info/
