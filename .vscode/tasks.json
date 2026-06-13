@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Fetch missing wheels",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"download_wheels.py"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run build script",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"build.py"
+			],
+			"group": "build"
+		}
+	]
+}
