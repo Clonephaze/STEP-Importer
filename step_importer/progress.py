@@ -13,6 +13,7 @@ Usage::
         bar.update(0.9, "Importing to scene")
     # finish() called automatically on __exit__
 """
+
 from __future__ import annotations
 
 import math
@@ -57,10 +58,10 @@ def _draw_callback() -> None:
         cx_, cy_ = x + w / 2, y + h / 2
         verts = [(cx_, cy_)]
         corners = [
-            (x + r,     y + r,     math.pi,       1.5 * math.pi),
-            (x + w - r, y + r,     1.5 * math.pi, 2.0 * math.pi),
-            (x + w - r, y + h - r, 0.0,           0.5 * math.pi),
-            (x + r,     y + h - r, 0.5 * math.pi, math.pi),
+            (x + r, y + r, math.pi, 1.5 * math.pi),
+            (x + w - r, y + r, 1.5 * math.pi, 2.0 * math.pi),
+            (x + w - r, y + h - r, 0.0, 0.5 * math.pi),
+            (x + r, y + h - r, 0.5 * math.pi, math.pi),
         ]
         for ox, oy, a0, a1 in corners:
             for i in range(segs + 1):
@@ -85,11 +86,11 @@ def _draw_callback() -> None:
         shader.uniform_float("color", color)
         b.draw(shader)
 
-    MARGIN   = 20
-    CARD_W   = 280
-    PAD      = 12
-    ROW_GAP  = 6
-    BAR_H    = 8
+    MARGIN = 20
+    CARD_W = 280
+    PAD = 12
+    ROW_GAP = 6
+    BAR_H = 8
     CORNER_R = 6
     TITLE_SZ = 12
     SMALL_SZ = 10
@@ -231,11 +232,13 @@ class ViewportProgressBar:
         global _STATE
         if not self._active:
             return
-        _STATE.update({
-            "percent": max(0.0, min(1.0, percent)),
-            "phase": phase,
-            "elapsed": time.time() - self._start,
-        })
+        _STATE.update(
+            {
+                "percent": max(0.0, min(1.0, percent)),
+                "phase": phase,
+                "elapsed": time.time() - self._start,
+            }
+        )
         _force_redraw()
 
     def __exit__(self, *_) -> bool:

@@ -3,12 +3,20 @@ from bpy.types import AddonPreferences
 from bpy.props import BoolProperty, EnumProperty
 
 _AXIS_ITEMS = [
-    ("X",       "X",  ""),
-    ("Y",       "Y",  ""),
-    ("Z",       "Z",  ""),
+    ("X", "X", ""),
+    ("Y", "Y", ""),
+    ("Z", "Z", ""),
     ("MINUS_X", "-X", ""),
     ("MINUS_Y", "-Y", ""),
     ("MINUS_Z", "-Z", ""),
+]
+
+
+_ROTATION_ITEMS = [
+    ("-90", "-90°", "Rotate 90° counter-clockwise"),
+    ("0", "0°", "No rotation"),
+    ("90", "90°", "Rotate 90° clockwise"),
+    ("180", "180°", "Rotate 180°"),
 ]
 
 
@@ -21,18 +29,18 @@ class STEPImporterPreferences(AddonPreferences):
         default=True,
     )
 
-    default_forward_axis: EnumProperty(
-        name="Default Forward",
-        description="Default forward axis used for new imports",
-        items=_AXIS_ITEMS,
-        default="MINUS_Z",
-    )
-
     default_up_axis: EnumProperty(
-        name="Default Up",
-        description="Default up axis used for new imports (Y = glTF standard, Z = FreeCAD/engineering default)",
+        name="Source Up Axis",
+        description="Which axis was 'up' in the application that exported the file (Y = glTF/FreeCAD/most CAD, Z = some CAD tools)",
         items=_AXIS_ITEMS,
         default="Y",
+    )
+
+    default_rotation: EnumProperty(
+        name="Default Rotation",
+        description="Default rotation around the vertical axis after up-axis correction",
+        items=_ROTATION_ITEMS,
+        default="0",
     )
 
     show_progress: BoolProperty(
@@ -50,9 +58,9 @@ class STEPImporterPreferences(AddonPreferences):
         layout.prop(self, "show_progress")
 
         layout.separator()
-        layout.label(text="Default Axes (pre-fill for new imports)")
-        layout.prop(self, "default_forward_axis")
-        layout.prop(self, "default_up_axis")
+        layout.label(text="Default Transform (pre-fill for new imports)")
+        layout.prop(self, "default_up_axis", text="Up in Source App")
+        layout.prop(self, "default_rotation")
 
 
 def register():
@@ -61,4 +69,3 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(STEPImporterPreferences)
-

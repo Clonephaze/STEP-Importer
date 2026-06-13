@@ -10,18 +10,9 @@ tags = ["Import-Export"]
 blender_version_min = "5.1.0"
 license = ["SPDX:GPL-3.0-or-later"]
 platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
-
-# cp312-abi3 wheels — compatible with Blender 5.1+ (Python 3.12/3.13+)
 wheels = [
   "./wheels/cascadio-0.1.0-cp312-abi3-win_amd64.whl",
   "./wheels/cascadio-0.1.0-cp312-abi3-macosx_11_0_arm64.whl",
   "./wheels/cascadio-0.1.0-cp312-abi3-macosx_11_0_x86_64.whl",
   "./wheels/cascadio-0.1.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-]
-
-[build]
-paths_exclude_pattern = [
-  "__pycache__/",
-  ".git",
-  "*.zip",
 ]
