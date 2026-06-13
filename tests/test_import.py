@@ -3,8 +3,6 @@
 Requires a real Blender environment with cascadio wheels installed.
 Run via:
     blender --background --python tests/run_tests.py
-
-Place fixture .step files in tests/fixtures/ before running.
 """
 import os
 import unittest
@@ -12,13 +10,20 @@ import unittest
 import bpy
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+RESOURCES_DIR = os.path.join(os.path.dirname(__file__), "Resources")
+
+BIM_EXAMPLE = os.path.join(RESOURCES_DIR, "BIMExample.step")
 
 
 def _fixture(name: str) -> str:
     return os.path.join(FIXTURES_DIR, name)
 
 
-class TestSTEPImport(unittest.TestCase):
+def _mesh_objects():
+    return [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+
+
+class TestBasicImport(unittest.TestCase):
     def setUp(self):
         bpy.ops.wm.read_factory_settings(use_empty=True)
 
@@ -30,9 +35,7 @@ class TestSTEPImport(unittest.TestCase):
 
         result = bpy.ops.import_scene.step(filepath=path)
         self.assertEqual(result, {"FINISHED"})
-
-        mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
-        self.assertGreater(len(mesh_objects), 0)
+        self.assertGreater(len(_mesh_objects()), 0)
 
     def test_imported_meshes_have_geometry(self):
         """Every imported mesh must have vertices and faces."""
@@ -42,21 +45,96 @@ class TestSTEPImport(unittest.TestCase):
 
         bpy.ops.import_scene.step(filepath=path)
 
-        for obj in bpy.context.scene.objects:
-            if obj.type == "MESH":
-                self.assertGreater(len(obj.data.vertices), 0, f"{obj.name}: no vertices")
-                self.assertGreater(len(obj.data.polygons), 0, f"{obj.name}: no faces")
+        for obj in _mesh_objects():
+            self.assertGreater(len(obj.data.vertices), 0, f"{obj.name}: no vertices")
+            self.assertGreater(len(obj.data.polygons), 0, f"{obj.name}: no faces")
 
-    def test_multi_body_step_imports_all_bodies(self):
-        """A multi-body STEP file should produce one mesh object per body."""
-        path = _fixture("multi_body.step")
-        if not os.path.exists(path):
-            self.skipTest("Fixture not found: multi_body.step")
 
-        bpy.ops.import_scene.step(filepath=path)
+class TestBIMExample(unittest.TestCase):
+    """Tests using the BIMExample.step fixture in tests/Resources/."""
 
-        mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
-        self.assertGreater(len(mesh_objects), 1, "Expected multiple mesh objects for a multi-body file")
+    def setUp(self):
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        if not os.path.exists(BIM_EXAMPLE):
+            self.skipTest("BIMExample.step not found in tests/Resources/")
+
+    def test_multi_body_produces_multiple_meshes(self):
+        """BIMExample has many bodies — expect more than one mesh object."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE)
+        self.assertGreater(len(_mesh_objects()), 1)
+
+    def test_all_meshes_have_geometry(self):
+        """Every imported mesh in BIMExample must have vertices and faces."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE)
+        for obj in _mesh_objects():
+            self.assertGreater(len(obj.data.vertices), 0, f"{obj.name}: no vertices")
+            self.assertGreater(len(obj.data.polygons), 0, f"{obj.name}: no faces")
+
+    def test_skip_axes_removes_axis_objects(self):
+        """Importing with skip_axes=True should leave no object named 'Axes*'."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE, skip_axes=True)
+        axes_objects = [
+            obj for obj in bpy.context.scene.objects
+            if obj.name.lower().startswith("axes") or obj.name.lower().startswith("axis")
+        ]
+        self.assertEqual(axes_objects, [], f"Axis objects were not removed: {[o.name for o in axes_objects]}")
+
+    def test_skip_axes_off_keeps_axis_objects(self):
+        """Importing with skip_axes=False should leave axis objects present."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE, skip_axes=False)
+        axes_objects = [
+            obj for obj in bpy.context.scene.objects
+            if obj.name.lower().startswith("axes") or obj.name.lower().startswith("axis")
+        ]
+        self.assertGreater(len(axes_objects), 0, "Expected axis objects to be present when skip_axes=False")
+
+    def test_skip_filters_reduce_object_count(self):
+        """Enabling all skip filters should produce fewer objects than importing everything."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE,
+                                   skip_axes=False, skip_sketches=False, skip_lines=False,
+                                   skip_hatches=False)
+        count_unfiltered = len(bpy.context.scene.objects)
+
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE,
+                                   skip_axes=True, skip_sketches=True, skip_lines=True,
+                                   skip_hatches=True, skip_wires=True, skip_rectangles=True,
+                                   skip_extrudes=True, skip_cuts=True, skip_terrain=True,
+                                   skip_wall_traces=True)
+        count_filtered = len(bpy.context.scene.objects)
+
+        self.assertLess(count_filtered, count_unfiltered,
+                        "Enabling all filters should produce fewer objects")
+
+    def test_merge_objects_produces_single_mesh(self):
+        """merge_objects=True should join all bodies into exactly one mesh."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE, merge_objects=True)
+        self.assertEqual(len(_mesh_objects()), 1, "Expected exactly one merged mesh object")
+
+    def test_up_axis_y_vs_z_changes_orientation(self):
+        """up_axis=Y and up_axis=Z should produce objects at different world Z positions."""
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE, up_axis="Y")
+        z_y = max(obj.location.z for obj in _mesh_objects()) if _mesh_objects() else 0
+
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE, up_axis="Z")
+        z_z = max(obj.location.z for obj in _mesh_objects()) if _mesh_objects() else 0
+
+        self.assertNotAlmostEqual(z_y, z_z, places=2,
+                                  msg="up_axis=Y and up_axis=Z produced identical Z positions — correction may not be working")
+
+    def test_materials_imported_when_enabled(self):
+        """With import_materials on, at least some meshes should have material slots."""
+        # Set preference then import
+        prefs = bpy.context.preferences.addons.get("step_importer")
+        if prefs:
+            prefs.preferences.import_materials = True
+        bpy.ops.import_scene.step(filepath=BIM_EXAMPLE)
+        meshes_with_materials = [
+            obj for obj in _mesh_objects() if len(obj.material_slots) > 0
+        ]
+        self.assertGreater(len(meshes_with_materials), 0,
+                           "Expected at least some meshes to have materials")
 
 
 if __name__ == "__main__":
