@@ -1,11 +1,12 @@
 schema_version = "1.0.0"
 
 id = "step_importer"
-version = "0.1.0"
+version = "0.9.0"
 name = "STEP Importer"
 tagline = "Import STEP files directly into Blender, no 3rd party needed"
 maintainer = "Clonephaze"
 type = "add-on"
+website = "https://github.com/Clonephaze/STEP-Importer"
 tags = ["Import-Export"]
 blender_version_min = "5.1.0"
 license = ["SPDX:GPL-3.0-or-later"]
