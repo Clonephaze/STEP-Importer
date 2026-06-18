@@ -10,11 +10,10 @@ website = "https://github.com/Clonephaze/STEP-Importer"
 tags = ["Import-Export"]
 blender_version_min = "5.1.0"
 license = ["SPDX:GPL-3.0-or-later"]
-platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64", "linux-arm64"]
+platforms = ["windows-x64", "macos-x64", "macos-arm64", "linux-x64"]
 wheels = [
   "./wheels/cascadio-0.0.18rc5-cp313-cp313-win_amd64.whl",
   "./wheels/cascadio-0.0.18rc5-cp313-cp313-macosx_11_0_arm64.whl",
   "./wheels/cascadio-0.0.18rc5-cp313-cp313-macosx_11_0_x86_64.whl",
   "./wheels/cascadio-0.0.18rc5-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-  "./wheels/cascadio-0.0.18rc5-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
 ]
