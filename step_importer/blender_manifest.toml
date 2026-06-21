@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "step_importer"
-version = "1.0.0"
+version = "1.0.1"
 name = "STEP Importer"
 tagline = "Import STEP files directly into Blender, no 3rd party needed"
 maintainer = "Clonephaze"
