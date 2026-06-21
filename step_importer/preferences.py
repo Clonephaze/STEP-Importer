@@ -20,6 +20,19 @@ _ROTATION_ITEMS = [
 ]
 
 
+def _apply_preset(self, context):
+    presets = {
+        "DRAFT": (0.05, 0.6),
+        "BALANCED": (0.01, 0.25),
+        "FINE": (0.002, 0.1),
+        "ULTRA_FINE": (0.0005, 0.05),
+    }
+    if self.tol_preset in presets:
+        linear, angular = presets[self.tol_preset]
+        self.tol_linear = linear
+        self.tol_angular = angular
+
+
 class STEPImporterPreferences(AddonPreferences):
     bl_idname = __package__
 
@@ -30,8 +43,8 @@ class STEPImporterPreferences(AddonPreferences):
     )
 
     default_up_axis: EnumProperty(
-        name="Source Up Axis",
-        description="Which axis was 'up' in the application that exported the file (Y = glTF/FreeCAD/most CAD, Z = some CAD tools)",
+        name="Model Up Axis",
+        description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
         items=_AXIS_ITEMS,
         default="Y",
     )
@@ -62,7 +75,33 @@ class STEPImporterPreferences(AddonPreferences):
         description="When True, scale linear tolerance to each feature's size rather than using a fixed world-space distance. Recommended for assemblies with mixed part sizes.",
         default=True,
     )
-    
+
+    tol_preset: EnumProperty(
+        name="Quality Preset",
+        description="Tessellation quality; higher quality produces smoother curves with more triangles",
+        items=[
+            (
+                "DRAFT",
+                "Draft",
+                "Fast tessellation with low triangle count, visible faceting on curves",
+            ),
+            ("BALANCED", "Balanced", "Good quality with moderate triangle count"),
+            (
+                "FINE",
+                "Fine",
+                "High quality, slower but good for hero parts or close-ups",
+            ),
+            (
+                "ULTRA_FINE",
+                "Ultra Fine",
+                "Maximum quality, slowest but best for extreme close-ups",
+            ),
+            ("CUSTOM", "Custom", "Manually set linear and angular tolerances"),
+        ],
+        default="BALANCED",
+        update=_apply_preset,
+    )
+
     shade_smooth: BoolProperty(
         name="Shade Smooth",
         description="Automatically shade smooth imported meshes.",
@@ -114,20 +153,22 @@ class STEPImporterPreferences(AddonPreferences):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
-        
-        layout.label(text="Default Transform (pre-fill for new imports)")
-        layout.prop(self, "default_up_axis", text="Up in Source App")
-        layout.prop(self, "default_rotation")
-        layout.separator()
-        
+
         layout.prop(self, "import_materials")
         layout.prop(self, "show_progress")
         layout.separator()
 
-        layout.label(text="Tolerances (for cascadio conversion)")
-        layout.prop(self, "tol_linear")
-        layout.prop(self, "tol_angular")
+        layout.label(text="Topology Tessellation Quality")
+        layout.prop(self, "tol_preset")
+        if self.tol_preset == "CUSTOM":
+            layout.prop(self, "tol_linear")
+            layout.prop(self, "tol_angular")
         layout.prop(self, "tol_relative")
+        layout.separator()
+
+        layout.label(text="Default Transform (pre-fill for new imports)")
+        layout.prop(self, "default_up_axis", text="Up Axis for model")
+        layout.prop(self, "default_rotation")
         layout.separator()
 
         layout.prop(self, "shade_smooth")

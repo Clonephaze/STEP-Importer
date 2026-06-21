@@ -99,8 +99,8 @@ class ImportSTEPOperator(Operator, ImportHelper):
     )
 
     up_axis: EnumProperty(
-        name="Source Up Axis",
-        description="Which axis was 'up' in the application that exported this file (will be rotated to Blender's +Z)",
+        name="Model Up Axis",
+        description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
         items=_AXIS_ITEMS,
         default="Y",
     )
@@ -160,17 +160,15 @@ class ImportSTEPOperator(Operator, ImportHelper):
             layout.prop(prefs.preferences, "import_materials")
             layout.separator()
 
-        layout.label(text="Transform")
-        layout.prop(self, "up_axis", text="Up in Source App")
-        layout.prop(self, "rotation_deg")
-
-        layout.separator()
-        layout.label(text="Tolerances (for cascadio conversion)")
         if prefs:
-            layout.prop(prefs.preferences, "tol_linear")
-            layout.prop(prefs.preferences, "tol_angular")
+            layout.label(text="Topology Tessellation Quality")
+            layout.prop(prefs.preferences, "tol_preset")
+            if prefs.preferences.tol_preset == "CUSTOM":
+                layout.prop(prefs.preferences, "tol_linear")
+                layout.prop(prefs.preferences, "tol_angular")
             layout.prop(prefs.preferences, "tol_relative")
             layout.separator()
+
         layout.label(text="Post-Import Cleanup")
         if prefs:
             layout.prop(prefs.preferences, "shade_smooth")
@@ -185,8 +183,15 @@ class ImportSTEPOperator(Operator, ImportHelper):
                 if prefs.preferences.ct_dissolve:
                     box.prop(prefs.preferences, "ct_dissolve_angle")
         layout.prop(self, "merge_objects")
-
         layout.separator()
+
+        header, panel = layout.panel("Post-Import Transforms", default_closed=True)
+        header.label(text="Post-Import Transforms")
+        if panel:
+            panel.prop(self, "up_axis", text="Up Axis for model")
+            panel.prop(self, "rotation_deg")
+            layout.separator()
+
         header, panel = layout.panel("step_filters", default_closed=True)
         header.label(text="Skip Construction Geometry")
         if panel:
