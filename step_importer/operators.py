@@ -158,13 +158,32 @@ class ImportSTEPOperator(Operator, ImportHelper):
         prefs = context.preferences.addons.get(__package__)
         if prefs:
             layout.prop(prefs.preferences, "import_materials")
+            layout.separator()
 
-        layout.separator()
         layout.label(text="Transform")
         layout.prop(self, "up_axis", text="Up in Source App")
         layout.prop(self, "rotation_deg")
 
         layout.separator()
+        layout.label(text="Tolerances (for cascadio conversion)")
+        if prefs:
+            layout.prop(prefs.preferences, "tol_linear")
+            layout.prop(prefs.preferences, "tol_angular")
+            layout.prop(prefs.preferences, "tol_relative")
+            layout.separator()
+        layout.label(text="Post-Import Cleanup")
+        if prefs:
+            layout.prop(prefs.preferences, "shade_smooth")
+            layout.prop(prefs.preferences, "cleanup_topology")
+            if prefs.preferences.cleanup_topology:
+                box = layout.box()
+                box.label(text="Cleanup Options")
+                box.prop(prefs.preferences, "ct_doubles")
+                if prefs.preferences.ct_doubles:
+                    box.prop(prefs.preferences, "ct_doubles_dist")
+                box.prop(prefs.preferences, "ct_dissolve")
+                if prefs.preferences.ct_dissolve:
+                    box.prop(prefs.preferences, "ct_dissolve_angle")
         layout.prop(self, "merge_objects")
 
         layout.separator()
