@@ -98,6 +98,11 @@ class ImportSTEPOperator(Operator, ImportHelper):
         options={"HIDDEN"},
     )
 
+    filepath: StringProperty(
+        subtype="FILE_PATH",
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
     up_axis: EnumProperty(
         name="Model Up Axis",
         description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
