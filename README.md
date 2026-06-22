@@ -27,3 +27,12 @@ Automatic and/or manual post-import mesh cleanup is being investigated and *shou
 #### Can I export STEP files as well?
 
 No. STEP files store precise CAD geometry (B-Rep/NURBS surfaces), while Blender primarily works with polygon meshes. Once CAD data has been converted into triangles, the information required to recreate an accurate STEP model is no longer available. As a result, STEP export is outside the scope of this addon.
+
+#### The exact naming structure from my CAD assembly doesn’t match what appears in Blender. Why?
+Currently this is a limitation of cascadio, but it is one I have already identified and am 90 percent sure I can fix it with a simple PR upstream, if they accept the change. 
+When the fix has been pushed upstream, this addon will automatically benefit and I will push an update to support it. 
+
+#### Non-standard characters import incorrectly. Do you plan to support them?
+
+Yes, this one is actually a limitation of OCCT itself but one that I feel they will be happy to accept a fix for and I already know how to fix it.
+I doubt they would deny this fix, as theres no downside to accepting these characters. As soon as the fix is accepted upstream I will push a fix for it here
