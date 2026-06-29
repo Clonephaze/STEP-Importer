@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from math import pi, radians
 
@@ -6,6 +7,20 @@ import bpy
 
 from .progress import ViewportProgressBar
 from .utils import detect_file_type, cleanup_topology
+
+# Matches Blender’s automatic “.001” / “.002” duplicate-name suffixes.
+_BLENDER_SUFFIX = re.compile(r"\.\d{3,}$")
+
+
+def _find_layer_collection(layer_col, name: str):
+    """Recursively find a layer collection by its collection name."""
+    if layer_col.name == name:
+        return layer_col
+    for child in layer_col.children:
+        result = _find_layer_collection(child, name)
+        if result:
+            return result
+    return None
 
 
 def _convert_to_glb(filepath: str, prefs) -> bytes:
@@ -83,6 +98,22 @@ def _filter_objects(new_objects: list, skip_prefixes: frozenset) -> list:
         bpy.data.objects.remove(obj, do_unlink=True)
 
     return new_objects
+
+
+def _tag_objects(objects: list, filepath: str, merged: bool) -> None:
+    """Stamp CAD provenance metadata onto each imported mesh object.
+
+    Stores the source file path and the GLB node name (with Blender’s
+    automatic numeric suffixes stripped) so the regenerate operator can
+    match the object after a re-import regardless of name conflicts.
+    Merged objects receive a sentinel path because they have no stable
+    single-node identity.
+    """
+    for obj in objects:
+        if obj.type != "MESH":
+            continue
+        obj["step_source_file"] = filepath
+        obj["step_node_path"] = "__merged__" if merged else _BLENDER_SUFFIX.sub("", obj.name)
 
 
 def _build_correction(up_axis: str, rotation_deg: float):
@@ -171,6 +202,8 @@ def import_step(
     rotation_deg: float = 0.0,
     merge_objects: bool = False,
     skip_prefixes: frozenset = frozenset(),
+    label: str = None,
+    placement: str = "ORIGIN",
 ) -> None:
     """Convert a STEP/IGES file and import it into the current Blender scene.
 
@@ -187,9 +220,12 @@ def import_step(
         rotation_deg: Additional rotation in degrees around Blender's +Z axis.
         merge_objects: When True, all imported bodies are joined into one mesh.
         skip_prefixes: Lowercase name prefixes of construction geometry to remove.
+        label:        Override the progress bar title (used for multi-file batches).
+        placement:    "ORIGIN" leaves objects at world origin; "CURSOR" offsets them
+                      to the current 3D cursor position.
     """
     prefs = bpy.context.preferences.addons[__package__].preferences
-    filename = os.path.basename(filepath)
+    filename = label if label is not None else os.path.basename(filepath)
 
     with ViewportProgressBar(bpy.context, filename) as bar:
         bar.update(0.05, "Reading file")
@@ -202,9 +238,174 @@ def import_step(
         new_objects = _filter_objects(new_objects, skip_prefixes)
         _apply_correction(new_objects, up_axis, rotation_deg)
 
+        if placement == "CURSOR":
+            from mathutils import Matrix
+            cursor_loc = bpy.context.scene.cursor.location
+            offset = Matrix.Translation(cursor_loc)
+            for obj in new_objects:
+                obj.matrix_world = offset @ obj.matrix_world
+
         if prefs.shade_smooth or prefs.cleanup_topology:
             bar.update(0.80, "Post-processing")
             _post_process(new_objects, prefs)
 
         if merge_objects:
             new_objects = _merge_objects(new_objects)
+
+        _tag_objects(new_objects, filepath, merge_objects)
+
+
+def regenerate_parts(
+    objects,
+    tol_linear: float,
+    tol_angular: float,
+    tol_relative: bool,
+    import_materials: bool,
+) -> tuple:
+    """Re-tessellate all eligible objects in *objects*, loading each source
+    file only once regardless of how many parts share it.
+
+    Returns ``(success_count: int, errors: list[str])``.
+    """
+    eligible = [
+        obj for obj in objects
+        if obj.type == "MESH"
+        and "step_source_file" in obj
+        and "step_node_path" in obj
+        and obj["step_node_path"] != "__merged__"
+    ]
+
+    if not eligible:
+        return 0, ["No eligible STEP objects in selection"]
+
+    prefs = bpy.context.preferences.addons[__package__].preferences
+
+    original_mode = bpy.context.object.mode if bpy.context.object else "OBJECT"
+    if original_mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    try:
+        return _regenerate_parts_impl(
+            eligible, tol_linear, tol_angular, tol_relative, import_materials, prefs
+        )
+    finally:
+        if original_mode != "OBJECT":
+            bpy.ops.object.mode_set(mode=original_mode)
+
+
+def regenerate_part(
+    obj: "bpy.types.Object",
+    tol_linear: float,
+    tol_angular: float,
+    tol_relative: bool,
+    import_materials: bool,
+) -> tuple:
+    """Re-tessellate a single object. Convenience wrapper around
+    :func:`regenerate_parts`.
+
+    Returns ``(success: bool, message: str)``.
+    """
+    count, errors = regenerate_parts(
+        [obj], tol_linear, tol_angular, tol_relative, import_materials
+    )
+    if count == 1:
+        return True, f"Regenerated '{obj.name}'"
+    return False, errors[0] if errors else "Unknown error"
+
+
+def _regenerate_parts_impl(eligible, tol_linear, tol_angular, tol_relative,
+                            import_materials, prefs):
+    from types import SimpleNamespace
+
+    tol_ns = SimpleNamespace(
+        import_materials=import_materials,
+        tol_linear=tol_linear,
+        tol_angular=tol_angular,
+        tol_relative=tol_relative,
+        shade_smooth=prefs.shade_smooth,
+    )
+
+    # Group by source file so each file is loaded only once.
+    by_source = {}
+    for obj in eligible:
+        by_source.setdefault(obj["step_source_file"], []).append(obj)
+
+    success_count = 0
+    errors = []
+
+    for source_file, file_objects in by_source.items():
+        if not os.path.isfile(source_file):
+            for obj in file_objects:
+                errors.append(f"'{obj.name}': source file not found")
+            continue
+
+        file_count, file_errors = _regenerate_file_batch(
+            source_file, file_objects, tol_ns, prefs
+        )
+        success_count += file_count
+        errors.extend(file_errors)
+
+    return success_count, errors
+
+
+def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
+    """Load *source_file* once and swap mesh data for every object in *objects*."""
+    errors = []
+    filename = os.path.basename(source_file)
+
+    with ViewportProgressBar(bpy.context, filename) as bar:
+        bar.update(0.05, "Reading file")
+        glb_bytes = _convert_to_glb(source_file, tol_ns)
+
+        scratch = bpy.data.collections.new("__step_regen_scratch__")
+        bpy.context.scene.collection.children.link(scratch)
+        scratch.hide_viewport = True
+
+        layer_col = _find_layer_collection(
+            bpy.context.view_layer.layer_collection, scratch.name
+        )
+        prev_active = bpy.context.view_layer.active_layer_collection
+        bpy.context.view_layer.active_layer_collection = layer_col
+
+        bar.update(0.60, "Importing to scene")
+        try:
+            new_objects = _import_glb(glb_bytes, tol_ns)
+        finally:
+            bpy.context.view_layer.active_layer_collection = prev_active
+
+        # Build a node-name -> mesh-object lookup from the scratch import.
+        scratch_by_node = {
+            _BLENDER_SUFFIX.sub("", o.name): o
+            for o in new_objects
+            if o.type == "MESH"
+        }
+
+        bar.update(0.75, "Applying changes")
+
+        swapped = []
+        for obj in objects:
+            node_path = obj["step_node_path"]
+            match = scratch_by_node.get(node_path)
+            if match is None:
+                errors.append(
+                    f"'{obj.name}': node '{node_path}' not found in re-import"
+                )
+                continue
+
+            old_mesh = obj.data
+            obj.data = match.data
+            obj.data.name = old_mesh.name
+            # Only free the old mesh when it has no remaining users.
+            if old_mesh.users == 0:
+                bpy.data.meshes.remove(old_mesh)
+            swapped.append(obj)
+
+        bar.update(0.90, "Post-processing")
+        if swapped:
+            _post_process(swapped, prefs)
+
+        for leftover in list(scratch.objects):
+            bpy.data.objects.remove(leftover, do_unlink=True)
+        bpy.data.collections.remove(scratch)
+
+    return len(swapped), errors

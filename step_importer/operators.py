@@ -1,5 +1,7 @@
+import os
+
 import bpy
-from bpy.props import BoolProperty, EnumProperty, StringProperty
+from bpy.props import BoolProperty, CollectionProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 
@@ -103,6 +105,16 @@ class ImportSTEPOperator(Operator, ImportHelper):
         options={"HIDDEN", "SKIP_SAVE"},
     )
 
+    # Multi-file drop support — populated by FileHandler for multi-drop
+    files: CollectionProperty(
+        type=bpy.types.OperatorFileListElement,
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+    directory: StringProperty(
+        subtype="DIR_PATH",
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
     up_axis: EnumProperty(
         name="Model Up Axis",
         description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
@@ -115,6 +127,16 @@ class ImportSTEPOperator(Operator, ImportHelper):
         description="Degrees to rotate around the vertical axis after up-axis correction",
         items=_ROTATION_ITEMS,
         default="0",
+    )
+
+    placement: EnumProperty(
+        name="Placement",
+        description="Where to place imported objects in the scene",
+        items=[
+            ("ORIGIN", "World Origin", "Place at Blender world origin"),
+            ("CURSOR", "3D Cursor", "Place at the current 3D cursor position"),
+        ],
+        default="ORIGIN",
     )
 
     merge_objects: BoolProperty(
@@ -195,6 +217,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
         if panel:
             panel.prop(self, "up_axis", text="Up Axis for model")
             panel.prop(self, "rotation_deg")
+            panel.prop(self, "placement")
             layout.separator()
 
         header, panel = layout.panel("step_filters", default_closed=True)
@@ -209,8 +232,9 @@ class ImportSTEPOperator(Operator, ImportHelper):
         if prefs:
             self.up_axis = prefs.preferences.default_up_axis
             self.rotation_deg = prefs.preferences.default_rotation
+            self.placement = prefs.preferences.default_placement
 
-        if self.filepath:
+        if self.filepath or self.files:
             return context.window_manager.invoke_props_dialog(self)
 
         return super().invoke(context, event)
@@ -223,25 +247,51 @@ class ImportSTEPOperator(Operator, ImportHelper):
             )
             return {"CANCELLED"}
 
-        try:
-            skip_prefixes = frozenset(
-                p
-                for prop_name, _label, _default, prefixes, _tip in _CONSTRUCTION_FILTERS
-                if getattr(self, prop_name)
-                for p in prefixes
-            )
-            import_step(
-                self.filepath,
-                up_axis=self.up_axis,
-                rotation_deg=float(self.rotation_deg),
-                merge_objects=self.merge_objects,
-                skip_prefixes=skip_prefixes,
-            )
-        except Exception as e:
-            self.report({"ERROR"}, f"Import failed: {e}")
+        # Build the list of absolute paths to import.
+        if self.files:
+            filepaths = [
+                os.path.join(self.directory, f.name)
+                for f in self.files
+                if f.name
+            ]
+        elif self.filepath:
+            filepaths = [self.filepath]
+        else:
+            self.report({"ERROR"}, "No file selected.")
             return {"CANCELLED"}
 
-        return {"FINISHED"}
+        skip_prefixes = frozenset(
+            p
+            for prop_name, _label, _default, prefixes, _tip in _CONSTRUCTION_FILTERS
+            if getattr(self, prop_name)
+            for p in prefixes
+        )
+
+        total = len(filepaths)
+        errors = []
+        for i, filepath in enumerate(filepaths):
+            label = (
+                f"[{i + 1}/{total}] {os.path.basename(filepath)}"
+                if total > 1
+                else None
+            )
+            try:
+                import_step(
+                    filepath,
+                    up_axis=self.up_axis,
+                    rotation_deg=float(self.rotation_deg),
+                    merge_objects=self.merge_objects,
+                    skip_prefixes=skip_prefixes,
+                    label=label,
+                    placement=self.placement,
+                )
+            except Exception as e:
+                errors.append(f"{os.path.basename(filepath)}: {e}")
+
+        for err in errors:
+            self.report({"ERROR"}, err)
+
+        return {"CANCELLED"} if errors and not (total - len(errors)) else {"FINISHED"}
 
 
 class STEP_FH_import(bpy.types.FileHandler):

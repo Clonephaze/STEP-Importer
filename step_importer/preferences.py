@@ -19,16 +19,25 @@ _ROTATION_ITEMS = [
     ("180", "180°", "Rotate 180°"),
 ]
 
+QUALITY_PRESET_ITEMS = [
+    ("DRAFT",      "Draft",      "Fast tessellation with low triangle count, visible faceting on curves"),
+    ("BALANCED",   "Balanced",   "Good quality with moderate triangle count"),
+    ("FINE",       "Fine",       "High quality, slower but good for hero parts or close-ups"),
+    ("ULTRA_FINE", "Ultra Fine", "Maximum quality, slowest but best for extreme close-ups"),
+    ("CUSTOM",     "Custom",     "Manually set linear and angular tolerances"),
+]
+
+QUALITY_PRESETS = {
+    "DRAFT":      (0.05, 0.6),
+    "BALANCED":   (0.01, 0.25),
+    "FINE":       (0.002, 0.1),
+    "ULTRA_FINE": (0.0005, 0.05),
+}
+
 
 def _apply_preset(self, context):
-    presets = {
-        "DRAFT": (0.05, 0.6),
-        "BALANCED": (0.01, 0.25),
-        "FINE": (0.002, 0.1),
-        "ULTRA_FINE": (0.0005, 0.05),
-    }
-    if self.tol_preset in presets:
-        linear, angular = presets[self.tol_preset]
+    if self.tol_preset in QUALITY_PRESETS:
+        linear, angular = QUALITY_PRESETS[self.tol_preset]
         self.tol_linear = linear
         self.tol_angular = angular
 
@@ -79,25 +88,7 @@ class STEPImporterPreferences(AddonPreferences):
     tol_preset: EnumProperty(
         name="Quality Preset",
         description="Tessellation quality; higher quality produces smoother curves with more triangles",
-        items=[
-            (
-                "DRAFT",
-                "Draft",
-                "Fast tessellation with low triangle count, visible faceting on curves",
-            ),
-            ("BALANCED", "Balanced", "Good quality with moderate triangle count"),
-            (
-                "FINE",
-                "Fine",
-                "High quality, slower but good for hero parts or close-ups",
-            ),
-            (
-                "ULTRA_FINE",
-                "Ultra Fine",
-                "Maximum quality, slowest but best for extreme close-ups",
-            ),
-            ("CUSTOM", "Custom", "Manually set linear and angular tolerances"),
-        ],
+        items=QUALITY_PRESET_ITEMS,
         default="BALANCED",
         update=_apply_preset,
     )
@@ -149,6 +140,16 @@ class STEPImporterPreferences(AddonPreferences):
         default=True,
     )
 
+    default_placement: EnumProperty(
+        name="Default Placement",
+        description="Where to place imported objects in the scene",
+        items=[
+            ("ORIGIN", "World Origin", "Place at Blender world origin"),
+            ("CURSOR", "3D Cursor", "Place at the current 3D cursor position"),
+        ],
+        default="ORIGIN",
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -169,6 +170,7 @@ class STEPImporterPreferences(AddonPreferences):
         layout.label(text="Default Transform (pre-fill for new imports)")
         layout.prop(self, "default_up_axis", text="Up Axis for model")
         layout.prop(self, "default_rotation")
+        layout.prop(self, "default_placement")
         layout.separator()
 
         layout.prop(self, "shade_smooth")
