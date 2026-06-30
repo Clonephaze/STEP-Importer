@@ -139,15 +139,20 @@ def _build_correction(up_axis: str, rotation_deg: float):
     return spin @ up_mat
 
 
-def _apply_correction(new_objects: list, up_axis: str, rotation_deg: float) -> None:
+def _apply_correction(new_objects: list, up_axis: str, rotation_deg: float, scale: float = 1.0) -> None:
     """Apply axis correction matrix to all imported objects.
 
     Args:
         new_objects: List of imported objects to correct.
         up_axis: Which axis of the source model is "up".
         rotation_deg: Additional rotation in degrees around Blender's +Z.
+        scale: Uniform scale multiplier applied after orientation correction.
     """
+    from mathutils import Matrix
+
     correction = _build_correction(up_axis, rotation_deg)
+    if scale != 1.0:
+        correction = Matrix.Scale(scale, 4) @ correction
     for obj in new_objects:
         obj.matrix_world = correction @ obj.matrix_world
 
@@ -251,6 +256,7 @@ def import_step(
     label: str = None,
     placement: str = "ORIGIN",
     use_assembly_collections: bool = False,
+    scale: float = 1.0,
 ) -> None:
     """Convert a STEP/IGES file and import it into the current Blender scene.
 
@@ -283,7 +289,7 @@ def import_step(
         new_objects = _import_glb(glb_bytes, prefs)
 
         new_objects = _filter_objects(new_objects, skip_prefixes)
-        _apply_correction(new_objects, up_axis, rotation_deg)
+        _apply_correction(new_objects, up_axis, rotation_deg, scale)
 
         if placement == "CURSOR":
             from mathutils import Matrix

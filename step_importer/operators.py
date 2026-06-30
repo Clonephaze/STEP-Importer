@@ -1,7 +1,7 @@
 import os
 
 import bpy
-from bpy.props import BoolProperty, CollectionProperty, EnumProperty, StringProperty
+from bpy.props import BoolProperty, CollectionProperty, EnumProperty, FloatProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 
@@ -139,6 +139,16 @@ class ImportSTEPOperator(Operator, ImportHelper):
         default="ORIGIN",
     )
 
+    scale: FloatProperty(
+        name="Scale",
+        description="Uniform scale multiplier applied to the imported geometry. Leave at 1.0 for correctly-exported files. Use 1000 if the model imports as millimetre-sized when it should be metres, or 0.001 for the reverse.",
+        default=1.0,
+        min=0.0001,
+        max=10000.0,
+        soft_min=0.001,
+        soft_max=1000.0,
+    )
+
     merge_objects: BoolProperty(
         name="Merge Bodies",
         description="Join all imported bodies into a single mesh object",
@@ -227,6 +237,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
             panel.prop(self, "up_axis", text="Up Axis for model")
             panel.prop(self, "rotation_deg")
             panel.prop(self, "placement")
+            panel.prop(self, "scale")
             layout.separator()
 
         header, panel = layout.panel("step_filters", default_closed=True)
@@ -242,6 +253,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
             self.up_axis = prefs.preferences.default_up_axis
             self.rotation_deg = prefs.preferences.default_rotation
             self.placement = prefs.preferences.default_placement
+            self.scale = prefs.preferences.default_scale
             self.use_assembly_collections = prefs.preferences.use_assembly_collections
 
         if self.filepath or self.files:
@@ -295,6 +307,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
                     label=label,
                     placement=self.placement,
                     use_assembly_collections=self.use_assembly_collections,
+                    scale=self.scale,
                 )
             except Exception as e:
                 errors.append(f"{os.path.basename(filepath)}: {e}")

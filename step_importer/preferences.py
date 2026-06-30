@@ -1,6 +1,6 @@
 import bpy
 from bpy.types import AddonPreferences
-from bpy.props import BoolProperty, EnumProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty
 
 _AXIS_ITEMS = [
     ("X", "X", ""),
@@ -150,6 +150,16 @@ class STEPImporterPreferences(AddonPreferences):
         default="ORIGIN",
     )
 
+    default_scale: FloatProperty(
+        name="Default Scale",
+        description="Uniform scale multiplier applied to imported geometry. Use 1000 if a model that should be metres imports as millimetres, or 0.001 if a model that should be millimetres imports as metres.",
+        default=1.0,
+        min=0.0001,
+        max=10000.0,
+        soft_min=0.001,
+        soft_max=1000.0,
+    )
+
     use_assembly_collections: BoolProperty(
         name="Assembly Collections",
         description="Organise imported parts into nested Blender collections matching the STEP assembly hierarchy",
@@ -178,6 +188,7 @@ class STEPImporterPreferences(AddonPreferences):
         layout.prop(self, "default_up_axis", text="Up Axis for model")
         layout.prop(self, "default_rotation")
         layout.prop(self, "default_placement")
+        layout.prop(self, "default_scale")
         layout.separator()
 
         layout.prop(self, "shade_smooth")
