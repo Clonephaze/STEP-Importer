@@ -349,6 +349,24 @@ def _regenerate_parts_impl(eligible, tol_linear, tol_angular, tol_relative,
     return success_count, errors
 
 
+def _mesh_bbox_center(mesh):
+    """Return the axis-aligned bounding box centre of *mesh* in local space."""
+    from mathutils import Vector
+
+    if not mesh.vertices:
+        return Vector((0.0, 0.0, 0.0))
+    inf = float("inf")
+    mn = [inf, inf, inf]
+    mx = [-inf, -inf, -inf]
+    for v in mesh.vertices:
+        for i in range(3):
+            if v.co[i] < mn[i]:
+                mn[i] = v.co[i]
+            if v.co[i] > mx[i]:
+                mx[i] = v.co[i]
+    return Vector(((mn[i] + mx[i]) * 0.5 for i in range(3)))
+
+
 def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
     """Load *source_file* once and swap mesh data for every object in *objects*."""
     errors = []
@@ -394,11 +412,21 @@ def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
                 continue
 
             old_mesh = obj.data
+            old_local_center = _mesh_bbox_center(old_mesh)
+
             obj.data = match.data
             obj.data.name = old_mesh.name
-            # Only free the old mesh when it has no remaining users.
             if old_mesh.users == 0:
                 bpy.data.meshes.remove(old_mesh)
+
+            # Compensate for any origin offset the user applied before regenerating.
+            # Adjusting matrix_world by the delta keeps the geometry visually in place.
+            new_local_center = _mesh_bbox_center(obj.data)
+            delta = new_local_center - old_local_center
+            if delta.length_squared > 1e-12:
+                from mathutils import Matrix
+                obj.matrix_world = obj.matrix_world @ Matrix.Translation(-delta)
+
             swapped.append(obj)
 
         bar.update(0.90, "Post-processing")
