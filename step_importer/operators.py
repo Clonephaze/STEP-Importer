@@ -145,6 +145,12 @@ class ImportSTEPOperator(Operator, ImportHelper):
         default=False,
     )
 
+    use_assembly_collections: BoolProperty(
+        name="Assembly Collections",
+        description="Organise imported parts into nested Blender collections matching the STEP assembly hierarchy. Ignored when Merge Bodies is enabled.",
+        default=False,
+    )
+
     # ── Construction geometry filters ─────────────────────────────────────────
     skip_axes: BoolProperty(
         name="Axes", description=_CONSTRUCTION_FILTERS[0][4], default=True
@@ -185,6 +191,9 @@ class ImportSTEPOperator(Operator, ImportHelper):
         prefs = context.preferences.addons.get(__package__)
         if prefs:
             layout.prop(prefs.preferences, "import_materials")
+            row = layout.row()
+            row.active = not self.merge_objects
+            row.prop(self, "use_assembly_collections")
             layout.separator()
 
         if prefs:
@@ -233,6 +242,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
             self.up_axis = prefs.preferences.default_up_axis
             self.rotation_deg = prefs.preferences.default_rotation
             self.placement = prefs.preferences.default_placement
+            self.use_assembly_collections = prefs.preferences.use_assembly_collections
 
         if self.filepath or self.files:
             return context.window_manager.invoke_props_dialog(self)
@@ -284,6 +294,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
                     skip_prefixes=skip_prefixes,
                     label=label,
                     placement=self.placement,
+                    use_assembly_collections=self.use_assembly_collections,
                 )
             except Exception as e:
                 errors.append(f"{os.path.basename(filepath)}: {e}")

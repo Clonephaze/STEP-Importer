@@ -150,12 +150,19 @@ class STEPImporterPreferences(AddonPreferences):
         default="ORIGIN",
     )
 
+    use_assembly_collections: BoolProperty(
+        name="Assembly Collections",
+        description="Organise imported parts into nested Blender collections matching the STEP assembly hierarchy",
+        default=False,
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         layout.prop(self, "import_materials")
+        layout.prop(self, "use_assembly_collections")
         layout.prop(self, "show_progress")
         layout.separator()
 

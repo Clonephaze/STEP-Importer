@@ -197,6 +197,51 @@ def _post_process(new_objects: list, prefs) -> None:
         )
 
 
+def _build_assembly_collections(new_objects: list, root_col) -> None:
+    """Organise imported objects into nested Blender collections mirroring
+    the CAD assembly hierarchy.
+
+    The glTF importer parents child objects to Empty objects for non-mesh
+    assembly nodes.  This function walks that hierarchy and creates a
+    matching nested collection structure, then re-links each object into
+    the appropriate collection.
+    """
+    new_set = set(new_objects)
+    col_cache: dict = {}  # id(empty_obj) → bpy.types.Collection
+
+    def _col_for_empty(empty):
+        eid = id(empty)
+        if eid in col_cache:
+            return col_cache[eid]
+        parent_col = _parent_col_of(empty)
+        col = bpy.data.collections.new(empty.name)
+        parent_col.children.link(col)
+        col_cache[eid] = col
+        _relink(empty, col)
+        return col
+
+    def _parent_col_of(obj):
+        p = obj.parent
+        if p is None or p not in new_set:
+            return root_col
+        if p.type == "EMPTY":
+            return _col_for_empty(p)
+        return _parent_col_of(p)
+
+    def _relink(obj, target):
+        for c in list(obj.users_collection):
+            c.objects.unlink(obj)
+        target.objects.link(obj)
+
+    for obj in new_objects:
+        if obj.type == "EMPTY":
+            _col_for_empty(obj)
+        else:
+            target = _parent_col_of(obj)
+            if target is not root_col:
+                _relink(obj, target)
+
+
 def import_step(
     filepath: str,
     up_axis: str = "Y",
@@ -205,6 +250,7 @@ def import_step(
     skip_prefixes: frozenset = frozenset(),
     label: str = None,
     placement: str = "ORIGIN",
+    use_assembly_collections: bool = False,
 ) -> None:
     """Convert a STEP/IGES file and import it into the current Blender scene.
 
@@ -246,6 +292,10 @@ def import_step(
             for obj in new_objects:
                 obj.matrix_world = offset @ obj.matrix_world
 
+        if use_assembly_collections and not merge_objects and new_objects:
+            root_col = bpy.context.view_layer.active_layer_collection.collection
+            _build_assembly_collections(new_objects, root_col)
+
         if prefs.shade_smooth or prefs.cleanup_topology:
             bar.update(0.80, "Post-processing")
             _post_process(new_objects, prefs)
@@ -281,7 +331,8 @@ def regenerate_parts(
 
     prefs = bpy.context.preferences.addons[__package__].preferences
 
-    original_mode = bpy.context.object.mode if bpy.context.object else "OBJECT"
+    original_active = bpy.context.view_layer.objects.active
+    original_mode = original_active.mode if original_active else "OBJECT"
     if original_mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -290,7 +341,8 @@ def regenerate_parts(
             eligible, tol_linear, tol_angular, tol_relative, import_materials, prefs
         )
     finally:
-        if original_mode != "OBJECT":
+        if original_mode != "OBJECT" and original_active and original_active.name in bpy.data.objects:
+            bpy.context.view_layer.objects.active = original_active
             bpy.ops.object.mode_set(mode=original_mode)
 
 
