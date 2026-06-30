@@ -45,6 +45,7 @@ def _convert_to_glb(filepath: str, prefs) -> bytes:
         tol_linear=prefs.tol_linear,
         tol_angular=prefs.tol_angular,
         tol_relative=prefs.tol_relative,
+        node_name_format=cascadio.NodeNameFormat.PRODUCT_OR_INSTANCE,
     )
 
 
