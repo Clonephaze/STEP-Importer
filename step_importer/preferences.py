@@ -52,8 +52,8 @@ class STEPImporterPreferences(AddonPreferences):
     )
 
     default_up_axis: EnumProperty(
-        name="Model Up Axis",
-        description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
+        name="Source Up Axis",
+        description="Which axis pointed up in the CAD application this model came from. Usually Y for most CAD software. Switch to Z if your model appears lying on it's side after import",
         items=_AXIS_ITEMS,
         default="Y",
     )
@@ -171,35 +171,42 @@ class STEPImporterPreferences(AddonPreferences):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        layout.prop(self, "import_materials")
-        layout.prop(self, "use_assembly_collections")
-        layout.prop(self, "show_progress")
-        layout.separator()
-
-        layout.label(text="Topology Tessellation Quality")
-        layout.prop(self, "tol_preset")
-        if self.tol_preset == "CUSTOM":
-            layout.prop(self, "tol_linear")
-            layout.prop(self, "tol_angular")
-        layout.prop(self, "tol_relative")
-        layout.separator()
-
-        layout.label(text="Default Transform (pre-fill for new imports)")
-        layout.prop(self, "default_up_axis", text="Up Axis for model")
+        # ── Default Transforms ────────────────────────────────────────────────
+        layout.label(text="Default Transforms")
+        layout.prop(self, "default_up_axis", text="Source Up Axis")
         layout.prop(self, "default_rotation")
         layout.prop(self, "default_placement")
         layout.prop(self, "default_scale")
         layout.separator()
 
+        # ── Quality & Appearance ──────────────────────────────────────────────
+        layout.label(text="Quality & Appearance")
+        layout.prop(self, "tol_preset")
+        if self.tol_preset == "CUSTOM":
+            layout.prop(self, "tol_linear")
+            layout.prop(self, "tol_angular")
+        layout.prop(self, "tol_relative")
+        layout.prop(self, "import_materials")
         layout.prop(self, "shade_smooth")
+        layout.separator()
+
+        # ── Structure ─────────────────────────────────────────────────────────
+        layout.label(text="Structure")
+        layout.prop(self, "use_assembly_collections")
+        layout.prop(self, "show_progress")
+        layout.separator()
+
+        # ── Cleanup ───────────────────────────────────────────────────────────
+        layout.label(text="Cleanup")
         layout.prop(self, "cleanup_topology")
         if self.cleanup_topology:
-            layout.prop(self, "ct_doubles")
+            box = layout.box()
+            box.prop(self, "ct_doubles")
             if self.ct_doubles:
-                layout.prop(self, "ct_doubles_dist")
-            layout.prop(self, "ct_dissolve")
+                box.prop(self, "ct_doubles_dist")
+            box.prop(self, "ct_dissolve")
             if self.ct_dissolve:
-                layout.prop(self, "ct_dissolve_angle")
+                box.prop(self, "ct_dissolve_angle")
 
 
 def register():

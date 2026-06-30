@@ -116,8 +116,8 @@ class ImportSTEPOperator(Operator, ImportHelper):
     )
 
     up_axis: EnumProperty(
-        name="Model Up Axis",
-        description="Which axis is up on the model. Usually this is Y for CAD, but if your model looks like it's lying on its side after import, try changing this to Z.",
+        name="Source Up Axis",
+        description="Which axis pointed up in the CAD application this model came from. Usually Y for most CAD software. Try Z if your model appears lying on it's side after import",
         items=_AXIS_ITEMS,
         default="Y",
     )
@@ -199,47 +199,51 @@ class ImportSTEPOperator(Operator, ImportHelper):
         layout.use_property_decorate = False
 
         prefs = context.preferences.addons.get(__package__)
-        if prefs:
-            layout.prop(prefs.preferences, "import_materials")
-            row = layout.row()
-            row.active = not self.merge_objects
-            row.prop(self, "use_assembly_collections")
-            layout.separator()
 
+        # ── Transforms ────────────────────────────────────────────────────────
+        layout.label(text="Transforms")
+        layout.prop(self, "up_axis", text="Source Up Axis")
+        layout.prop(self, "rotation_deg")
+        layout.prop(self, "placement")
+        layout.prop(self, "scale")
+        layout.separator()
+
+        # ── Quality & Appearance ──────────────────────────────────────────────
+        layout.label(text="Quality & Appearance")
         if prefs:
-            layout.label(text="Topology Tessellation Quality")
             layout.prop(prefs.preferences, "tol_preset")
             if prefs.preferences.tol_preset == "CUSTOM":
                 layout.prop(prefs.preferences, "tol_linear")
                 layout.prop(prefs.preferences, "tol_angular")
             layout.prop(prefs.preferences, "tol_relative")
-            layout.separator()
-
-        layout.label(text="Post-Import Cleanup")
-        if prefs:
+            layout.prop(prefs.preferences, "import_materials")
             layout.prop(prefs.preferences, "shade_smooth")
-            layout.prop(prefs.preferences, "cleanup_topology")
+        layout.separator()
+
+        # ── Structure ─────────────────────────────────────────────────────────
+        layout.label(text="Structure")
+        if prefs:
+            row = layout.row()
+            row.active = not self.merge_objects
+            row.prop(self, "use_assembly_collections")
+        layout.prop(self, "merge_objects")
+        layout.separator()
+
+        # ── Cleanup ───────────────────────────────────────────────────────────
+        header, panel = layout.panel("step_cleanup", default_closed=True)
+        header.label(text="Cleanup")
+        if panel and prefs:
+            panel.prop(prefs.preferences, "cleanup_topology")
             if prefs.preferences.cleanup_topology:
-                box = layout.box()
-                box.label(text="Cleanup Options")
+                box = panel.box()
                 box.prop(prefs.preferences, "ct_doubles")
                 if prefs.preferences.ct_doubles:
                     box.prop(prefs.preferences, "ct_doubles_dist")
                 box.prop(prefs.preferences, "ct_dissolve")
                 if prefs.preferences.ct_dissolve:
                     box.prop(prefs.preferences, "ct_dissolve_angle")
-        layout.prop(self, "merge_objects")
-        layout.separator()
 
-        header, panel = layout.panel("Post-Import Transforms", default_closed=True)
-        header.label(text="Post-Import Transforms")
-        if panel:
-            panel.prop(self, "up_axis", text="Up Axis for model")
-            panel.prop(self, "rotation_deg")
-            panel.prop(self, "placement")
-            panel.prop(self, "scale")
-            layout.separator()
-
+        # ── Skip Construction Geometry ────────────────────────────────────────
         header, panel = layout.panel("step_filters", default_closed=True)
         header.label(text="Skip Construction Geometry")
         if panel:
