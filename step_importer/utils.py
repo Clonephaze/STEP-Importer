@@ -1,10 +1,27 @@
 import os
+from typing import Literal
 
 _STEP_EXTENSIONS = frozenset({".step", ".stp"})
 _IGES_EXTENSIONS = frozenset({".iges", ".igs"})
+_AXIS_ITEMS = [
+    ("X", "X", ""),
+    ("Y", "Y", ""),
+    ("Z", "Z", ""),
+    ("MINUS_X", "-X", ""),
+    ("MINUS_Y", "-Y", ""),
+    ("MINUS_Z", "-Z", ""),
+]
 
 
-def detect_file_type(filepath: str) -> str:
+_ROTATION_ITEMS = [
+    ("-90", "-90°", "Rotate 90° counter-clockwise"),
+    ("0", "0°", "No rotation"),
+    ("90", "90°", "Rotate 90° clockwise"),
+    ("180", "180°", "Rotate 180°"),
+]
+
+
+def detect_file_type(filepath: str) -> Literal["step", "iges"]:
     """Return ``'step'`` or ``'iges'`` based on *filepath*'s extension."""
     ext = os.path.splitext(filepath)[1].lower()
     if ext in _STEP_EXTENSIONS:
@@ -22,6 +39,29 @@ def cascadio_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def get_addon_preferences(context=None):
+    """Return this add-on's preferences, raising a friendly error if unavailable.
+
+    Args:
+        context: A ``bpy.context``-like object exposing ``preferences.addons``.
+            Defaults to ``bpy.context`` when not given.
+
+    Raises:
+        RuntimeError: If the add-on isn't registered/enabled, instead of a
+            raw ``KeyError`` from indexing ``preferences.addons`` directly.
+    """
+    import bpy
+
+    context = context or bpy.context
+    entry = context.preferences.addons.get(__package__)
+    if entry is None:
+        raise RuntimeError(
+            f"STEP Importer preferences not found (no '{__package__}' entry in "
+            "bpy.context.preferences.addons)"
+        )
+    return entry.preferences
 
 
 def cleanup_topology(
@@ -51,7 +91,7 @@ def cleanup_topology(
 
         try:
             if remove_doubles:
-                bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=doubles_dist)
+                bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=doubles_dist)
 
             if dissolve:
                 if temp_sharp:
@@ -69,8 +109,8 @@ def cleanup_topology(
                     angle_limit=math.radians(dissolve_angle),
                     use_dissolve_boundaries=False,
                     delimit={"SHARP"},
-                    verts=bm.verts,
-                    edges=bm.edges,
+                    verts=list(bm.verts),
+                    edges=list(bm.edges),
                 )
                 if temp_sharp:
                     for edge in bm.edges:

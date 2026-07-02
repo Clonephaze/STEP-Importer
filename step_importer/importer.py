@@ -6,7 +6,7 @@ from math import pi, radians
 import bpy
 
 from .progress import ViewportProgressBar
-from .utils import detect_file_type, cleanup_topology
+from .utils import detect_file_type, cleanup_topology, get_addon_preferences
 
 # Matches Blender’s automatic “.001” / “.002” duplicate-name suffixes.
 _BLENDER_SUFFIX = re.compile(r"\.\d{3,}$")
@@ -36,7 +36,8 @@ def _convert_to_glb(filepath: str, prefs) -> bytes:
     import cascadio
 
     file_type = detect_file_type(filepath)
-    step_bytes = open(filepath, "rb").read()
+    with open(filepath, "rb") as file:
+        step_bytes = file.read()
 
     return cascadio.load(
         step_bytes,
@@ -89,16 +90,14 @@ def _filter_objects(new_objects: list, skip_prefixes: frozenset) -> list:
     if not skip_prefixes:
         return new_objects
 
-    to_remove = [
-        obj
-        for obj in new_objects
-        if any(obj.name.lower().startswith(p) for p in skip_prefixes)
-    ]
-    for obj in to_remove:
-        new_objects.remove(obj)
-        bpy.data.objects.remove(obj, do_unlink=True)
-
-    return new_objects
+    kept = []
+    for obj in new_objects:
+        name = obj.name.lower()
+        if any(name.startswith(prefix) for prefix in skip_prefixes):
+            bpy.data.objects.remove(obj, do_unlink=True)
+        else:
+            kept.append(obj)
+    return kept
 
 
 def _tag_objects(objects: list, filepath: str, merged: bool) -> None:
@@ -114,7 +113,9 @@ def _tag_objects(objects: list, filepath: str, merged: bool) -> None:
         if obj.type != "MESH":
             continue
         obj["step_source_file"] = filepath
-        obj["step_node_path"] = "__merged__" if merged else _BLENDER_SUFFIX.sub("", obj.name)
+        obj["step_node_path"] = (
+            "__merged__" if merged else _BLENDER_SUFFIX.sub("", obj.name)
+        )
 
 
 def _build_correction(up_axis: str, rotation_deg: float):
@@ -139,7 +140,9 @@ def _build_correction(up_axis: str, rotation_deg: float):
     return spin @ up_mat
 
 
-def _apply_correction(new_objects: list, up_axis: str, rotation_deg: float, scale: float = 1.0) -> None:
+def _apply_correction(
+    new_objects: list, up_axis: str, rotation_deg: float, scale: float = 1.0
+) -> None:
     """Apply axis correction matrix to all imported objects.
 
     Args:
@@ -253,7 +256,7 @@ def import_step(
     rotation_deg: float = 0.0,
     merge_objects: bool = False,
     skip_prefixes: frozenset = frozenset(),
-    label: str = None,
+    label: str | None = None,
     placement: str = "ORIGIN",
     use_assembly_collections: bool = False,
     scale: float = 1.0,
@@ -276,8 +279,13 @@ def import_step(
         label:        Override the progress bar title (used for multi-file batches).
         placement:    "ORIGIN" leaves objects at world origin; "CURSOR" offsets them
                       to the current 3D cursor position.
+        use_assembly_collections: When True, imported objects are organised into
+                      nested collections matching the STEP assembly hierarchy.
+        scale:        Uniform scale multiplier applied to the imported geometry. 
+                      Use 1000 if the model imports as millimetre-sized when it 
+                      should be metres, or 0.001 for the reverse.
     """
-    prefs = bpy.context.preferences.addons[__package__].preferences
+    prefs = get_addon_preferences(bpy.context)
     filename = label if label is not None else os.path.basename(filepath)
 
     with ViewportProgressBar(bpy.context, filename) as bar:
@@ -293,6 +301,7 @@ def import_step(
 
         if placement == "CURSOR":
             from mathutils import Matrix
+
             cursor_loc = bpy.context.scene.cursor.location
             offset = Matrix.Translation(cursor_loc)
             for obj in new_objects:
@@ -325,7 +334,8 @@ def regenerate_parts(
     Returns ``(success_count: int, errors: list[str])``.
     """
     eligible = [
-        obj for obj in objects
+        obj
+        for obj in objects
         if obj.type == "MESH"
         and "step_source_file" in obj
         and "step_node_path" in obj
@@ -335,7 +345,7 @@ def regenerate_parts(
     if not eligible:
         return 0, ["No eligible STEP objects in selection"]
 
-    prefs = bpy.context.preferences.addons[__package__].preferences
+    prefs = get_addon_preferences(bpy.context)
 
     original_active = bpy.context.view_layer.objects.active
     original_mode = original_active.mode if original_active else "OBJECT"
@@ -347,7 +357,11 @@ def regenerate_parts(
             eligible, tol_linear, tol_angular, tol_relative, import_materials, prefs
         )
     finally:
-        if original_mode != "OBJECT" and original_active and original_active.name in bpy.data.objects:
+        if (
+            original_mode != "OBJECT"
+            and original_active
+            and original_active.name in bpy.data.objects
+        ):
             bpy.context.view_layer.objects.active = original_active
             bpy.ops.object.mode_set(mode=original_mode)
 
@@ -372,8 +386,9 @@ def regenerate_part(
     return False, errors[0] if errors else "Unknown error"
 
 
-def _regenerate_parts_impl(eligible, tol_linear, tol_angular, tol_relative,
-                            import_materials, prefs):
+def _regenerate_parts_impl(
+    eligible, tol_linear, tol_angular, tol_relative, import_materials, prefs
+):
     from types import SimpleNamespace
 
     tol_ns = SimpleNamespace(
@@ -410,19 +425,16 @@ def _regenerate_parts_impl(eligible, tol_linear, tol_angular, tol_relative,
 def _mesh_bbox_center(mesh):
     """Return the axis-aligned bounding box centre of *mesh* in local space."""
     from mathutils import Vector
+    import numpy as np # type: ignore
 
     if not mesh.vertices:
         return Vector((0.0, 0.0, 0.0))
-    inf = float("inf")
-    mn = [inf, inf, inf]
-    mx = [-inf, -inf, -inf]
-    for v in mesh.vertices:
-        for i in range(3):
-            if v.co[i] < mn[i]:
-                mn[i] = v.co[i]
-            if v.co[i] > mx[i]:
-                mx[i] = v.co[i]
-    return Vector(((mn[i] + mx[i]) * 0.5 for i in range(3)))
+
+    coords = np.empty(len(mesh.vertices) * 3, dtype=np.float64)
+    mesh.vertices.foreach_get("co", coords)
+    coords = coords.reshape(-1, 3)
+    center = (coords.min(axis=0) + coords.max(axis=0)) * 0.5
+    return Vector(center.tolist())
 
 
 def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
@@ -438,61 +450,65 @@ def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
         bpy.context.scene.collection.children.link(scratch)
         scratch.hide_viewport = True
 
-        layer_col = _find_layer_collection(
-            bpy.context.view_layer.layer_collection, scratch.name
-        )
-        prev_active = bpy.context.view_layer.active_layer_collection
-        bpy.context.view_layer.active_layer_collection = layer_col
-
-        bar.update(0.60, "Importing to scene")
         try:
-            new_objects = _import_glb(glb_bytes, tol_ns)
+            layer_col = _find_layer_collection(
+                bpy.context.view_layer.layer_collection, scratch.name
+            )
+            prev_active = bpy.context.view_layer.active_layer_collection
+            bpy.context.view_layer.active_layer_collection = layer_col
+
+            bar.update(0.60, "Importing to scene")
+            try:
+                new_objects = _import_glb(glb_bytes, tol_ns)
+            finally:
+                bpy.context.view_layer.active_layer_collection = prev_active
+
+            # Build a node-name -> mesh-object lookup from the scratch import.
+            scratch_by_node = {
+                _BLENDER_SUFFIX.sub("", o.name): o
+                for o in new_objects
+                if o.type == "MESH"
+            }
+
+            bar.update(0.75, "Applying changes")
+
+            swapped = []
+            for obj in objects:
+                node_path = obj["step_node_path"]
+                match = scratch_by_node.get(node_path)
+                if match is None:
+                    errors.append(
+                        f"'{obj.name}': node '{node_path}' not found in re-import"
+                    )
+                    continue
+
+                old_mesh = obj.data
+                old_local_center = _mesh_bbox_center(old_mesh)
+
+                obj.data = match.data
+                obj.data.name = old_mesh.name
+                if old_mesh.users == 0:
+                    bpy.data.meshes.remove(old_mesh)
+
+                # Compensate for any origin offset the user applied before regenerating.
+                # Adjusting matrix_world by the delta keeps the geometry visually in place.
+                new_local_center = _mesh_bbox_center(obj.data)
+                delta = new_local_center - old_local_center
+                if delta.length_squared > 1e-12:
+                    from mathutils import Matrix
+
+                    obj.matrix_world = obj.matrix_world @ Matrix.Translation(
+                        (-delta).to_tuple()
+                    )
+
+                swapped.append(obj)
+
+            bar.update(0.90, "Post-processing")
+            if swapped:
+                _post_process(swapped, prefs)
         finally:
-            bpy.context.view_layer.active_layer_collection = prev_active
-
-        # Build a node-name -> mesh-object lookup from the scratch import.
-        scratch_by_node = {
-            _BLENDER_SUFFIX.sub("", o.name): o
-            for o in new_objects
-            if o.type == "MESH"
-        }
-
-        bar.update(0.75, "Applying changes")
-
-        swapped = []
-        for obj in objects:
-            node_path = obj["step_node_path"]
-            match = scratch_by_node.get(node_path)
-            if match is None:
-                errors.append(
-                    f"'{obj.name}': node '{node_path}' not found in re-import"
-                )
-                continue
-
-            old_mesh = obj.data
-            old_local_center = _mesh_bbox_center(old_mesh)
-
-            obj.data = match.data
-            obj.data.name = old_mesh.name
-            if old_mesh.users == 0:
-                bpy.data.meshes.remove(old_mesh)
-
-            # Compensate for any origin offset the user applied before regenerating.
-            # Adjusting matrix_world by the delta keeps the geometry visually in place.
-            new_local_center = _mesh_bbox_center(obj.data)
-            delta = new_local_center - old_local_center
-            if delta.length_squared > 1e-12:
-                from mathutils import Matrix
-                obj.matrix_world = obj.matrix_world @ Matrix.Translation(-delta)
-
-            swapped.append(obj)
-
-        bar.update(0.90, "Post-processing")
-        if swapped:
-            _post_process(swapped, prefs)
-
-        for leftover in list(scratch.objects):
-            bpy.data.objects.remove(leftover, do_unlink=True)
-        bpy.data.collections.remove(scratch)
+            for leftover in list(scratch.objects):
+                bpy.data.objects.remove(leftover, do_unlink=True)
+            bpy.data.collections.remove(scratch)
 
     return len(swapped), errors

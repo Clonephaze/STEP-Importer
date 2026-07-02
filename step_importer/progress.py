@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Optional
+import traceback
+from typing import Literal, Optional
 
 import bpy
 
@@ -43,6 +44,7 @@ def _draw_callback() -> None:
         if region is None:
             return
     except Exception:
+        traceback.print_exc()
         return
 
     percent = float(state.get("percent", 0.0))
@@ -181,7 +183,7 @@ def _force_redraw() -> None:
                     area.tag_redraw()
         bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
     except Exception:
-        pass
+        traceback.print_exc()
 
 
 class ViewportProgressBar:
@@ -224,7 +226,7 @@ class ViewportProgressBar:
                     _draw_callback, (), "WINDOW", "POST_PIXEL"
                 )
             except Exception:
-                pass
+                traceback.print_exc()
         _force_redraw()
         return self
 
@@ -241,7 +243,7 @@ class ViewportProgressBar:
         )
         _force_redraw()
 
-    def __exit__(self, *_) -> bool:
+    def __exit__(self, *_) -> Literal[False]:
         global _draw_handle, _STATE
         if not self._active:
             return False
@@ -251,7 +253,7 @@ class ViewportProgressBar:
             try:
                 bpy.types.SpaceView3D.draw_handler_remove(_draw_handle, "WINDOW")
             except Exception:
-                pass
+                traceback.print_exc()
             _draw_handle = None
         _force_redraw()
         return False

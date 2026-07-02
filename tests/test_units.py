@@ -17,6 +17,36 @@ if REPO_ROOT not in sys.path:
 _pkg_dir = os.path.join(REPO_ROOT, "step_importer")
 
 # ── Stub every external dependency before any step_importer code loads ────────
+# NOTE: run_tests.py discovers this file into the *same* Python process as
+# test_import.py, which needs the real bpy/mathutils/step_importer. So the
+# stub modules below are only kept in sys.modules for as long as it takes to
+# exec_module() the test copies of utils.py/importer.py — the originals
+# (or nothing, if this file is run standalone outside Blender) are restored
+# immediately afterward.
+
+_STUB_MODULE_NAMES = (
+    "bpy", "bpy.props", "bpy.types", "bpy_extras", "bpy_extras.io_utils",
+    "mathutils", "step_importer", "step_importer.operators",
+    "step_importer.preferences", "step_importer.progress",
+    # These two get overwritten below with test copies (built with the fake
+    # bpy/mathutils bound in *their* module globals via `import bpy` /
+    # `from mathutils import Matrix`). They must also be evicted afterward so
+    # that the real step_importer package re-imports fresh, real-bpy-bound
+    # copies instead of reusing these cached fakes.
+    "step_importer.utils", "step_importer.importer",
+)
+_original_modules = {name: sys.modules.get(name) for name in _STUB_MODULE_NAMES}
+
+
+def _restore_original_modules():
+    """Undo the stubbing above so the real bpy/mathutils/step_importer
+    (when present, e.g. inside Blender) are visible to other test modules."""
+    for name, mod in _original_modules.items():
+        if mod is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = mod
+
 
 def _empty_module(name):
     mod = types.ModuleType(name)
@@ -92,7 +122,30 @@ _utils_mod   = _load("step_importer.utils",    "utils.py")
 _importer_mod = _load("step_importer.importer", "importer.py")
 
 detect_file_type  = _utils_mod.detect_file_type
-_build_correction = _importer_mod._build_correction
+_real_build_correction = _importer_mod._build_correction
+
+# Now that the test copies of utils.py/importer.py are loaded, put the real
+# bpy/mathutils/step_importer (if any) back so the rest of the test process
+# — notably test_import.py — sees the genuine modules again.
+_restore_original_modules()
+
+
+def _build_correction(up_axis, rotation_deg):
+    """Call the real _build_correction with the fake mathutils in place.
+
+    _build_correction does ``from mathutils import Matrix`` inside its own
+    body, so the fake only needs to be visible in sys.modules for the
+    duration of this call, not globally.
+    """
+    orig = sys.modules.get("mathutils")
+    sys.modules["mathutils"] = _mathutils
+    try:
+        return _real_build_correction(up_axis, rotation_deg)
+    finally:
+        if orig is None:
+            sys.modules.pop("mathutils", None)
+        else:
+            sys.modules["mathutils"] = orig
 
 
 # ── detect_file_type tests ────────────────────────────────────────────────────

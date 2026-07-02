@@ -1,0 +1,11 @@
+{
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingModuleSource": "none",
+    "reportInvalidTypeForm": "none",
+    "reportOptionalMemberAccess": "none",
+    "reportAttributeAccessIssue": "none",
+    "reportAssignmentType": "none",
+    "reportGeneralTypeIssues": "none",
+    "reportIncompatibleMethodOverride": "none"
+  }
+}

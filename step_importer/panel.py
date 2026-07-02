@@ -1,4 +1,5 @@
 import os
+import traceback
 from math import radians
 
 import bpy
@@ -7,7 +8,7 @@ from bpy.types import Operator, Panel, PropertyGroup
 
 from .importer import regenerate_parts
 from .preferences import QUALITY_PRESET_ITEMS, QUALITY_PRESETS
-from .utils import cascadio_available, cleanup_topology
+from .utils import cascadio_available, cleanup_topology, get_addon_preferences
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ class STEP_OT_regenerate_part(Operator):
             and "step_source_file" in obj
             and "step_node_path" in obj
             and obj["step_node_path"] != "__merged__"
-            for obj in context.selected_objects
+            for obj in context.selected_objects or []
         )
 
     def execute(self, context):
@@ -79,17 +80,18 @@ class STEP_OT_regenerate_part(Operator):
             tol_linear = regen.tol_linear
             tol_angular = regen.tol_angular
 
-        prefs = context.preferences.addons[__package__].preferences
+        prefs = get_addon_preferences(context)
 
         try:
             count, errors = regenerate_parts(
-                context.selected_objects,
+                context.selected_objects or [],
                 tol_linear=tol_linear,
                 tol_angular=tol_angular,
                 tol_relative=regen.tol_relative,
                 import_materials=prefs.import_materials,
             )
         except Exception as e:
+            traceback.print_exc()
             self.report({"ERROR"}, f"Regenerate failed: {e}")
             return {"CANCELLED"}
 
@@ -111,11 +113,11 @@ class STEP_OT_cleanup_selected(Operator):
 
     @classmethod
     def poll(cls, context):
-        return any(obj.type == "MESH" for obj in context.selected_objects)
+        return any(obj.type == "MESH" for obj in context.selected_objects or [])
 
     def execute(self, context):
-        prefs = context.preferences.addons[__package__].preferences
-        mesh_objects = [obj for obj in context.selected_objects if obj.type == "MESH"]
+        prefs = get_addon_preferences(context)
+        mesh_objects = [obj for obj in context.selected_objects or [] if obj.type == "MESH"]
 
         # bmesh cannot access a mesh that is in edit mode; switch to Object
         # mode first and restore afterward.
@@ -172,7 +174,7 @@ class STEP_PT_tools(Panel):
         )
 
         eligible_selected = [
-            o for o in context.selected_objects
+            o for o in context.selected_objects or []
             if o.type == "MESH"
             and "step_source_file" in o
             and o.get("step_node_path", "__merged__") != "__merged__"
@@ -182,7 +184,7 @@ class STEP_PT_tools(Panel):
         if eligible_count > 1:
             col = box.column(align=True)
             col.label(text=f"{eligible_count} STEP parts selected", icon="OBJECT_DATA")
-        elif is_step_obj:
+        elif obj is not None and is_step_obj:
             col = box.column(align=True)
             col.label(text=obj["step_node_path"], icon="OBJECT_DATA")
             col.label(text=os.path.basename(obj["step_source_file"]), icon="FILE")
@@ -211,7 +213,7 @@ class STEP_PT_tools(Panel):
         box = layout.box()
         box.label(text="Cleanup", icon="BRUSH_DATA")
 
-        prefs = context.preferences.addons[__package__].preferences
+        prefs = get_addon_preferences(context)
         col = box.column(align=True)
         col.prop(prefs, "shade_smooth")
         col.prop(prefs, "ct_doubles")

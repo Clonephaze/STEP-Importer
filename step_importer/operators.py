@@ -1,4 +1,5 @@
 import os
+import traceback
 
 import bpy
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, FloatProperty, StringProperty
@@ -6,23 +7,7 @@ from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 
 from .importer import import_step
-from .utils import cascadio_available
-
-_AXIS_ITEMS = [
-    ("X", "X", ""),
-    ("Y", "Y", ""),
-    ("Z", "Z", ""),
-    ("MINUS_X", "-X", ""),
-    ("MINUS_Y", "-Y", ""),
-    ("MINUS_Z", "-Z", ""),
-]
-
-_ROTATION_ITEMS = [
-    ("-90", "-90°", "Rotate 90° counter-clockwise"),
-    ("0", "0°", "No rotation"),
-    ("90", "90°", "Rotate 90° clockwise"),
-    ("180", "180°", "Rotate 180°"),
-]
+from .utils import cascadio_available, _AXIS_ITEMS, _ROTATION_ITEMS
 
 # (prop_name, UI label, skip-by-default, name prefixes to match, tooltip)
 _CONSTRUCTION_FILTERS = [
@@ -40,7 +25,7 @@ _CONSTRUCTION_FILTERS = [
         ("sketch",),
         "Sketch objects from parametric history",
     ),
-    ("skip_lines", "Lines", True, ("line",), "Construction line objects"),
+    ("skip_lines", "Lines", True, ("line", "arc"), "Construction line/arc objects"),
     (
         "skip_hatches",
         "Hatches",
@@ -299,7 +284,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
             label = (
                 f"[{i + 1}/{total}] {os.path.basename(filepath)}"
                 if total > 1
-                else None
+                else ""
             )
             try:
                 import_step(
@@ -314,12 +299,14 @@ class ImportSTEPOperator(Operator, ImportHelper):
                     scale=self.scale,
                 )
             except Exception as e:
+                traceback.print_exc()
                 errors.append(f"{os.path.basename(filepath)}: {e}")
 
         for err in errors:
             self.report({"ERROR"}, err)
 
-        return {"CANCELLED"} if errors and not (total - len(errors)) else {"FINISHED"}
+        succeeded = total - len(errors)
+        return {"FINISHED"} if succeeded > 0 else {"CANCELLED"}
 
 
 class STEP_FH_import(bpy.types.FileHandler):

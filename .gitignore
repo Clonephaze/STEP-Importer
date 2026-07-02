@@ -13,3 +13,4 @@ __pycache__/
 # Test / IDE artifacts
 .pytest_cache/
 *.egg-info/
+tests/.wheel_cache/

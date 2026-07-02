@@ -1,23 +1,7 @@
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import BoolProperty, EnumProperty, FloatProperty
-
-_AXIS_ITEMS = [
-    ("X", "X", ""),
-    ("Y", "Y", ""),
-    ("Z", "Z", ""),
-    ("MINUS_X", "-X", ""),
-    ("MINUS_Y", "-Y", ""),
-    ("MINUS_Z", "-Z", ""),
-]
-
-
-_ROTATION_ITEMS = [
-    ("-90", "-90°", "Rotate 90° counter-clockwise"),
-    ("0", "0°", "No rotation"),
-    ("90", "90°", "Rotate 90° clockwise"),
-    ("180", "180°", "Rotate 180°"),
-]
+from .utils import _AXIS_ITEMS, _ROTATION_ITEMS
 
 QUALITY_PRESET_ITEMS = [
     ("DRAFT",      "Draft",      "Fast tessellation with low triangle count, visible faceting on curves"),
