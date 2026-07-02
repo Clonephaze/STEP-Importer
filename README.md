@@ -4,13 +4,12 @@ A straightforward STEP import addon that lets you drag-and-drop or directly sele
 
 ### Features
 * **Regenerate Part** - re-tessellate any previously imported body straight from its source file with new quality settings, one part or many at once, right from the STEP sidebar tab.
-* Tessellation quality presets (Draft / Balanced / Fine / Ultra Fine), or full manual control over linear and angular tolerance.
-* Post-import topology cleanup, plus a **Cleanup Selected** operator to re-run it later on any STEP object without a full re-import.
+* **Tessellation quality presets** - Choose from Draft / Balanced / Fine / Ultra Fine, or custom for full manual control over linear and angular tolerance.
+* **Topology cleanup** - operator to re-run it later on any STEP object without a full re-import.
 * **Assembly Collections** - organize imported STEP assemblies into nested Blender collections that mirror the CAD assembly hierarchy.
-* Choose where imports land: World Origin or the current 3D Cursor position.
-* Filter out non-solid STEP entities such as sketches, construction lines, and parametric history.
-* Basic material support, PBR coming when Cascadio supports it.
-* Drag and drop one or more STEP files directly into Blender.
+* **Import Filters** - Filter out non-solid STEP entities such as sketches, construction lines, parametric history, and more.
+* **Material Import** - for now colors *will* import correctly, when cascadio supports more material data I will add mappings for pbr materials. 
+* **Drag and Drop** - Drag one or more files directly into blender to import.
 
 ### Core Conversion Logic
 
