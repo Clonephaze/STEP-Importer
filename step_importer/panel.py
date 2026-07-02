@@ -207,6 +207,11 @@ class STEP_PT_tools(Panel):
         row.enabled = eligible_count > 0
         row.operator("step.regenerate_part", icon="FILE_REFRESH", text=btn_text)
 
+        if eligible_count <= 1:
+            hint = box.column(align=True)
+            hint.label(text="Tip: select multiple parts to", icon="INFO")
+            hint.label(text="regenerate them all at once", icon="BLANK1")
+
         layout.separator()
 
         # Cleanup section
