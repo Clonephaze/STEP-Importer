@@ -100,6 +100,76 @@ def _filter_objects(new_objects: list, skip_prefixes: frozenset) -> list:
     return kept
 
 
+# cascadio/OCCT never writes an explicit metallicFactor/roughnessFactor for
+# plain STEP colors, so glTF's un-set default of 1.0/1.0 (fully metallic,
+# fully rough) applies on import. Materials still sitting at that default
+# are corrected to Blender's Principled BSDF defaults instead.
+_GLTF_DEFAULT_METALLIC = 1.0
+_GLTF_DEFAULT_ROUGHNESS = 1.0
+_BSDF_DEFAULT_METALLIC = 0.0
+_BSDF_DEFAULT_ROUGHNESS = 0.5
+
+
+def _fix_material_pbr_defaults(mat: "bpy.types.Material") -> None:
+    """Correct a glTF-imported material left at spec-default Metallic/Roughness.
+
+    Only materials still sitting at glTF's un-set default (1.0/1.0) are
+    touched, so any legitimately authored metallic/rough material is left
+    alone.
+    """
+    if not mat.use_nodes or mat.node_tree is None:
+        return
+
+    bsdf = next(
+        (n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None
+    )
+    if bsdf is None:
+        return
+
+    metallic = bsdf.inputs.get("Metallic")
+    roughness = bsdf.inputs.get("Roughness")
+    if metallic is None or roughness is None:
+        return
+
+    if (
+        metallic.default_value == _GLTF_DEFAULT_METALLIC
+        and roughness.default_value == _GLTF_DEFAULT_ROUGHNESS
+    ):
+        metallic.default_value = _BSDF_DEFAULT_METALLIC
+        roughness.default_value = _BSDF_DEFAULT_ROUGHNESS
+
+
+def _strip_materials(objects: list) -> None:
+    """Remove all material slots from imported mesh objects."""
+    for obj in objects:
+        if obj.type == "MESH":
+            obj.data.materials.clear()
+
+
+def _apply_material_settings(objects: list, import_materials: bool) -> None:
+    """Apply the add-on's material import policy to freshly imported objects.
+
+    cascadio/OCCT always bakes STEP colors into the GLB regardless of the
+    ``import_materials`` setting, so when *import_materials* is False the
+    only way to actually disable colored materials is to strip the slots
+    here. When True, materials left at glTF's un-set Metallic/Roughness
+    default are corrected instead of rendering as dark rough metal.
+    """
+    if not import_materials:
+        _strip_materials(objects)
+        return
+
+    seen_materials = set()
+    for obj in objects:
+        if obj.type != "MESH":
+            continue
+        for mat in obj.data.materials:
+            if mat is None or mat.name in seen_materials:
+                continue
+            seen_materials.add(mat.name)
+            _fix_material_pbr_defaults(mat)
+
+
 def _tag_objects(objects: list, filepath: str, merged: bool) -> None:
     """Stamp CAD provenance metadata onto each imported mesh object.
 
@@ -178,8 +248,31 @@ def _merge_objects(new_objects: list) -> list:
     return new_objects
 
 
+def _apply_shading_state(objects: list, smooth: bool) -> None:
+    """Set flat/smooth shading on *objects*, matching *smooth*.
+
+    Used by the regenerate pipeline to restore each object's own prior
+    shading state instead of applying the current global shade_smooth
+    preference — shading is something the user can toggle per-object via
+    the right-click menu, so regenerate should never override it.
+    """
+    for obj in objects:
+        if obj.type != "MESH":
+            continue
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        if smooth:
+            bpy.ops.object.shade_smooth_by_angle(angle=radians(30))
+        else:
+            bpy.ops.object.shade_flat()
+
+
 def _post_process(new_objects: list, prefs) -> None:
-    """Apply shading and topology cleanup to imported objects.
+    """Apply shading and topology cleanup to freshly imported objects.
+
+    Only used by the initial import pipeline — the regenerate pipeline
+    restores each object's own prior shading/cleanup state directly instead
+    of applying these global preferences (see `_apply_shading_state`).
 
     Args:
         new_objects: List of imported objects to process.
@@ -297,6 +390,7 @@ def import_step(
         new_objects = _import_glb(glb_bytes, prefs)
 
         new_objects = _filter_objects(new_objects, skip_prefixes)
+        _apply_material_settings(new_objects, prefs.import_materials)
         _apply_correction(new_objects, up_axis, rotation_deg, scale)
 
         if placement == "CURSOR":
@@ -473,6 +567,10 @@ def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
             bar.update(0.75, "Applying changes")
 
             swapped = []
+            keep_materials = []
+            drop_materials = []
+            smooth_objects = []
+            flat_objects = []
             for obj in objects:
                 node_path = obj["step_node_path"]
                 match = scratch_by_node.get(node_path)
@@ -484,6 +582,13 @@ def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
 
                 old_mesh = obj.data
                 old_local_center = _mesh_bbox_center(old_mesh)
+                # Preserve this object's own material and shading state rather
+                # than the global import_materials/shade_smooth toggles — an
+                # object regenerated materialless/flat (or given materials/
+                # smoothed) should stay that way regardless of what settings
+                # were last used to import.
+                had_materials = any(old_mesh.materials)
+                was_smooth = bool(old_mesh.polygons) and old_mesh.polygons[0].use_smooth
 
                 obj.data = match.data
                 obj.data.name = old_mesh.name
@@ -502,10 +607,15 @@ def _regenerate_file_batch(source_file, objects, tol_ns, prefs):
                     )
 
                 swapped.append(obj)
+                (keep_materials if had_materials else drop_materials).append(obj)
+                (smooth_objects if was_smooth else flat_objects).append(obj)
+
+            _apply_material_settings(keep_materials, True)
+            _apply_material_settings(drop_materials, False)
 
             bar.update(0.90, "Post-processing")
-            if swapped:
-                _post_process(swapped, prefs)
+            _apply_shading_state(smooth_objects, True)
+            _apply_shading_state(flat_objects, False)
         finally:
             for leftover in list(scratch.objects):
                 bpy.data.objects.remove(leftover, do_unlink=True)
