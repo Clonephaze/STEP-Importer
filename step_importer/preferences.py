@@ -124,6 +124,16 @@ class STEPImporterPreferences(AddonPreferences):
         default=True,
     )
 
+    default_scale: FloatProperty(
+        name="Default Scale",
+        description="Uniform scale multiplier applied to imported geometry. Use 1000 if a model that should be metres imports as millimetres, or 0.001 if a model that should be millimetres imports as metres.",
+        default=1.0,
+        min=0.0001,
+        max=10000.0,
+        soft_min=0.001,
+        soft_max=1000.0,
+    )
+
     default_placement: EnumProperty(
         name="Default Placement",
         description="Where to place imported objects in the scene",
@@ -133,15 +143,17 @@ class STEPImporterPreferences(AddonPreferences):
         ],
         default="ORIGIN",
     )
-
-    default_scale: FloatProperty(
-        name="Default Scale",
-        description="Uniform scale multiplier applied to imported geometry. Use 1000 if a model that should be metres imports as millimetres, or 0.001 if a model that should be millimetres imports as metres.",
-        default=1.0,
-        min=0.0001,
-        max=10000.0,
-        soft_min=0.001,
-        soft_max=1000.0,
+    
+    default_origin_offset: EnumProperty(
+        name="Default Origin Offset",
+        description="Default offset applied to the origin of imported objects",
+        items=[
+            ("KEEP", "Keep", "Preserve the position from the CAD file"),
+            ("CENTERXY", "Center XY", "Center the imported model on the X and Y axes while preserving its original height."),
+            ("CENTERXYZ", "Center XYZ", "Center the imported model on the X, Y, and Z axes."),
+            ("BOTTOM", "Bottom Center", "Center the imported model on X and Y, and place its lowest point on the world Z=0 plane."),
+        ],
+        default="KEEP",
     )
 
     use_assembly_collections: BoolProperty(
@@ -159,8 +171,9 @@ class STEPImporterPreferences(AddonPreferences):
         layout.label(text="Default Transforms")
         layout.prop(self, "default_up_axis", text="Source Up Axis")
         layout.prop(self, "default_rotation")
-        layout.prop(self, "default_placement")
         layout.prop(self, "default_scale")
+        layout.prop(self, "default_placement")
+        layout.prop(self, "default_origin_offset")
         layout.separator()
 
         # ── Quality & Appearance ──────────────────────────────────────────────

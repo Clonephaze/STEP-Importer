@@ -133,6 +133,18 @@ class ImportSTEPOperator(Operator, ImportHelper):
         soft_min=0.001,
         soft_max=1000.0,
     )
+    
+    origin_offset: EnumProperty(
+        name="Origin Offset",
+        description="Adjust how the imported assembly is offset relative to the chosen placement location. This does not change object origins.",
+        items=[
+            ("KEEP", "Keep", "Preserve the position from the CAD file"),
+            ("CENTERXY", "Center XY", "Center the imported model on the X and Y axes while preserving its original height."),
+            ("CENTERXYZ", "Center XYZ", "Center the imported model on the X, Y, and Z axes."),
+            ("BOTTOM", "Bottom Center", "Center the imported model on X and Y, and place its lowest point on the world Z=0 plane.")
+        ],
+        default="KEEP",
+    )
 
     merge_objects: BoolProperty(
         name="Merge Bodies",
@@ -189,8 +201,10 @@ class ImportSTEPOperator(Operator, ImportHelper):
         layout.label(text="Transforms")
         layout.prop(self, "up_axis", text="Source Up Axis")
         layout.prop(self, "rotation_deg")
-        layout.prop(self, "placement")
         layout.prop(self, "scale")
+        layout.separator()
+        layout.prop(self, "placement")
+        layout.prop(self, "origin_offset")
         layout.separator()
 
         # ── Quality & Appearance ──────────────────────────────────────────────
@@ -242,6 +256,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
             self.up_axis = prefs.preferences.default_up_axis
             self.rotation_deg = prefs.preferences.default_rotation
             self.placement = prefs.preferences.default_placement
+            self.origin_offset = prefs.preferences.default_origin_offset
             self.scale = prefs.preferences.default_scale
             self.use_assembly_collections = prefs.preferences.use_assembly_collections
 
@@ -295,6 +310,7 @@ class ImportSTEPOperator(Operator, ImportHelper):
                     skip_prefixes=skip_prefixes,
                     label=label,
                     placement=self.placement,
+                    origin_offset=self.origin_offset,
                     use_assembly_collections=self.use_assembly_collections,
                     scale=self.scale,
                 )

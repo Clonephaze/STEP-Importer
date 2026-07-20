@@ -187,6 +187,48 @@ def _build_assembly_collections(new_objects: list, root_col) -> None:
                 _relink(obj, target)
 
 
+def _apply_origin_offset(objects, origin_offset: str) -> None:
+    """Apply an origin offset to a collection of objects."""
+
+    if origin_offset == "KEEP":
+        return
+
+    min_corner = Vector((float("inf"),) * 3)
+    max_corner = Vector((float("-inf"),) * 3)
+
+    for obj in objects:
+        for corner in obj.bound_box:
+            world = obj.matrix_world @ Vector(corner)
+            min_corner = Vector(
+                (
+                    min(min_corner.x, world.x),
+                    min(min_corner.y, world.y),
+                    min(min_corner.z, world.z),
+                )
+            )
+            max_corner = Vector(
+                (
+                    max(max_corner.x, world.x),
+                    max(max_corner.y, world.y),
+                    max(max_corner.z, world.z),
+                )
+            )
+
+    center = (min_corner + max_corner) / 2
+
+    if origin_offset == "CENTERXY":
+        offset = Vector((center.x, center.y, 0))
+    elif origin_offset == "CENTERXYZ":
+        offset = center
+    elif origin_offset == "BOTTOM":
+        offset = Vector((center.x, center.y, min_corner.z))
+    else:
+        return
+
+    for obj in objects:
+        obj.matrix_world.translation -= offset
+
+
 def import_step(
     filepath: str,
     up_axis: str = "Y",
@@ -195,6 +237,7 @@ def import_step(
     skip_prefixes: frozenset = frozenset(),
     label: str | None = None,
     placement: str = "ORIGIN",
+    origin_offset: str = "KEEP",
     use_assembly_collections: bool = False,
     scale: float = 1.0,
 ) -> None:
@@ -216,10 +259,14 @@ def import_step(
         label:        Override the progress bar title (used for multi-file batches).
         placement:    "ORIGIN" leaves objects at world origin; "CURSOR" offsets them
                       to the current 3D cursor position.
+        origin_offset:  "KEEP" preserves the original origin from the CAD file;
+                      "CENTERXY" centers the imported model on the X and Y axes while preserving its original height;
+                      "CENTERXYZ" centers the imported model on the X, Y, and Z axes;
+                      "BOTTOM" centers the imported model on X and Y, and places its lowest point on the world Z=0 plane.
         use_assembly_collections: When True, imported objects are organised into
                       nested collections matching the STEP assembly hierarchy.
-        scale:        Uniform scale multiplier applied to the imported geometry. 
-                      Use 1000 if the model imports as millimetre-sized when it 
+        scale:        Uniform scale multiplier applied to the imported geometry.
+                      Use 1000 if the model imports as millimetre-sized when it
                       should be metres, or 0.001 for the reverse.
     """
     prefs = get_addon_preferences(bpy.context)
@@ -244,6 +291,9 @@ def import_step(
             offset = Matrix.Translation(cursor_loc)
             for obj in new_objects:
                 obj.matrix_world = offset @ obj.matrix_world
+
+        if origin_offset != "KEEP":
+            _apply_origin_offset(new_objects, origin_offset)
 
         if use_assembly_collections and not merge_objects and new_objects:
             root_col = bpy.context.view_layer.active_layer_collection.collection
