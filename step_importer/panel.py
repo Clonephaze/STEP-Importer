@@ -6,7 +6,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty
 from bpy.types import Operator, Panel, PropertyGroup
 
-from .importer import regenerate_parts
+from .regenerate import regenerate_parts
 from .preferences import QUALITY_PRESET_ITEMS, QUALITY_PRESETS
 from .utils import cascadio_available, cleanup_topology, get_addon_preferences
 
@@ -246,10 +246,10 @@ _CLASSES = [
 def register():
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
-    bpy.types.WindowManager.step_regen = PointerProperty(type=STEP_RegenSettings)
+    bpy.types.WindowManager.step_regen = PointerProperty(type=STEP_RegenSettings) # type: ignore
 
 
 def unregister():
-    del bpy.types.WindowManager.step_regen
+    del bpy.types.WindowManager.step_regen # type: ignore
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)
