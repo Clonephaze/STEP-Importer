@@ -192,11 +192,15 @@ def _apply_origin_offset(objects, origin_offset: str) -> None:
 
     if origin_offset == "KEEP":
         return
+    
+    mesh_objects = [obj for obj in objects if obj.type == "MESH"]
+    if not mesh_objects:
+        return
 
     min_corner = Vector((float("inf"),) * 3)
     max_corner = Vector((float("-inf"),) * 3)
 
-    for obj in objects:
+    for obj in mesh_objects:
         for corner in obj.bound_box:
             world = obj.matrix_world @ Vector(corner)
             min_corner = Vector(
